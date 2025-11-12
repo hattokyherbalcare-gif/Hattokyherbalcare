@@ -6,7 +6,7 @@ import {
   signInWithEmailAndPassword, 
   signOut,
   signInAnonymously,
-  signInWithCustomToken // Added this for the smart config
+  signInWithCustomToken
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -17,8 +17,8 @@ import {
   setLogLevel, 
   doc, 
   setDoc,
-  query, // Added for sorting
-  orderBy // Added for sorting
+  query,
+  orderBy
 } from 'firebase/firestore';
 import { 
   ShoppingCart, Package, Send, MapPin, Phone, User, Banknote, List, X, Loader, 
@@ -35,9 +35,7 @@ const CURRENCY_SYMBOL = '₦';
 const ADMIN_USER_ID = "KD63qdJ0MkT4G3VSigQ2yUJBkjH2";
 
 // --- (SMART DEPLOYMENT FIX) ---
-// This code works in BOTH the chat preview AND on Netlify
 const getFirebaseConfig = () => {
-  // 1. Check for chat preview variables
   if (typeof __firebase_config !== 'undefined' && __firebase_config !== "{}") {
     console.log("Using __firebase_config");
     try {
@@ -47,8 +45,6 @@ const getFirebaseConfig = () => {
       console.error("Failed to parse __firebase_config", e);
     }
   }
-
-  // 2. Check for Netlify (Vite) variables
   if (import.meta.env.VITE_API_KEY) {
     console.log("Using VITE environment variables");
     return {
@@ -60,15 +56,12 @@ const getFirebaseConfig = () => {
       appId: import.meta.env.VITE_APP_ID
     };
   }
-  
-  // 3. Fallback if nothing is found
   console.warn("Firebase config not found, using fallback.");
   return {};
 };
 
 const firebaseConfig = getFirebaseConfig();
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-// Use VITE_APP_ID for Netlify, fallback to __app_id for chat, then to default
 const appId = import.meta.env.VITE_APP_ID || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 // --- (END OF SMART FIX) ---
 
@@ -143,13 +136,13 @@ const App = () => {
           } else {
             setUser(null);
           }
-          setLoading(false); // Auth check is complete
+          setLoading(false); 
         });
 
         const authenticate = async () => {
-          if (initialAuthToken) { // Chat preview with token
+          if (initialAuthToken) { 
             await signInWithCustomToken(authInstance, initialAuthToken);
-          } else { // Deployed site OR preview without token
+          } else { 
             if (!authInstance.currentUser) {
               await signInAnonymously(authInstance);
             }
@@ -174,13 +167,12 @@ const App = () => {
       setError("Failed to initialize Firebase services.");
       setLoading(false);
     }
-  }, []); // Runs only once
+  }, []); 
 
   // 2. Fetch Products and Orders (Real-time listener)
   useEffect(() => {
     if (!db || !user) return; 
 
-    // --- Products Listener (Public) ---
     const productsPath = `artifacts/${appId}/public/data/products`;
     const productsQuery = query(collection(db, productsPath), orderBy("createdAt", "desc"));
     const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
@@ -194,7 +186,6 @@ const App = () => {
       setError("Failed to load products from the database.");
     });
     
-    // --- Orders Listener (Public, but only Admin can see them) ---
     const ordersPath = `artifacts/${appId}/public/data/orders`;
     const ordersQuery = query(collection(db, ordersPath), orderBy("placedAt", "desc"));
     const unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
@@ -276,7 +267,7 @@ const App = () => {
       orderId: currentOrderId,
       customerDetails: formData,
       items: cartItems.map(item => ({
-        id: item.id, // Store product ID
+        id: item.id,
         name: item.name,
         quantity: item.quantity,
         price: item.price,
@@ -322,7 +313,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
           },
           onClose: () => setModalContent(null)
       });
-
 
     } catch (err) {
       console.error("Order Placement Error:", err);
@@ -426,9 +416,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     }
   };
 
-  // --- (CRITICAL FIX) ---
-  // The error was here. It was `catch (err) => {`
-  // It is now correctly `catch (err) {`
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     if (!db || !IS_ADMIN) return;
 
@@ -441,7 +428,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
         setError("Failed to update order status.");
     }
   };
-  // --- (END OF CRITICAL FIX) ---
   
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -470,40 +456,18 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
         setView('PRODUCTS');
     }
     await signOut(auth);
-    // After admin signs out, sign back in as a guest
     await signInAnonymously(auth);
   };
-
 
   // --- Rendering Components ---
 
   const renderLoginModal = () => (
     <Modal isOpen={showLogin} title="Admin Login" onClose={() => setShowLogin(false)}>
         <form onSubmit={handleLogin} className="space-y-4">
-            <input
-                type="email"
-                placeholder="Email"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                required
-            />
-            <input
-                type="password"
-                placeholder="Password"
-                value={loginPassword}
-                onChange={(e) => setLoginPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-                required
-            />
-            {loginError && (
-                <p className="text-red-500 text-sm">{loginError}</p>
-            )}
-            <button
-                type="submit"
-                disabled={isLoggingIn}
-                className={`w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl flex items-center justify-center space-x-2 disabled:opacity-50`}
-            >
+            <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" required />
+            <input type="password" placeholder="Password" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" required />
+            {loginError && (<p className="text-red-500 text-sm">{loginError}</p>)}
+            <button type="submit" disabled={isLoggingIn} className={`w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl flex items-center justify-center space-x-2 disabled:opacity-50`}>
                 {isLoggingIn ? <Loader className="animate-spin h-5 w-5" /> : <LogIn className="h-5 w-5" />}
                 <span>{isLoggingIn ? 'Logging In...' : 'Login'}</span>
             </button>
@@ -661,7 +625,10 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                             <div key={item.id} className="flex items-center justify-between p-4 border-b border-gray-100 bg-white hover:bg-gray-50 transition duration-150">
                                 <div className="flex-grow">
                                     <p className="font-semibold text-gray-800">{item.name}</p>
-                                    <p className={`text-sm text-indigo-600 font-bold`}>{CURRENCY_SYMBOL}{item.price.toFixed(2)}</T</p>
+                                    {/* --- (CRITICAL FIX) --- */}
+                                    {/* The error was here. It was `</T</p>` */}
+                                    <p className={`text-sm text-indigo-600 font-bold`}>{CURRENCY_SYMBOL}{item.price.toFixed(2)}</p>
+                                    {/* --- (END OF CRITICAL FIX) --- */}
                                 </div>
                                 <div className="flex items-center space-x-2 border border-gray-200 rounded-full p-0.5">
                                     <button onClick={() => handleUpdateQuantity(item.id, -1)} className="bg-gray-100 hover:bg-gray-300 w-7 h-7 rounded-full text-base transition duration-150 text-gray-700"> − </button>
@@ -711,14 +678,13 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
             <div className={`p-4 bg-indigo-50 rounded-xl border border-indigo-200 text-center shadow-inner`}>
                 <p className="font-bold text-lg text-gray-700 mb-2">
                     2. Use this <span className='underline'>Unique Order ID</span> for your payment reference:
-                </p>
+                </D>
                 <p className={`text-3xl font-extrabold text-indigo-900 p-3 bg-white rounded-lg select-all border-2 border-indigo-300`}>
                     {orderId || 'Generating...'}
                 </p>
                 <p className='mt-3 text-sm text-gray-600'>This ID links your payment to your digital order.</p>
             </div>
             
-            {/* --- (CRITICAL) YOUR BANK DETAILS (I fixed the error here) --- */}
             <div className="p-4 bg-gray-100 rounded-xl border border-gray-200">
                 <h3 className="text-xl font-semibold mb-3 flex items-center text-gray-700"><Banknote className="mr-2" /> Payment Account Details</h3>
                 <div className="text-sm space-y-1">
@@ -727,7 +693,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                     <p><strong>Account Number:</strong> 9041594111 (Copy & Paste)</p>
                 </div>
             </div>
-            {/* --- (END OF BANK DETAILS) --- */}
 
             <button type="submit" disabled={loading || cartItems.length === 0} className="w-full flex items-center justify-center space-x-3 bg-green-500 hover:bg-green-600 text-white font-extrabold py-3 rounded-xl text-xl transition duration-200 shadow-xl shadow-green-300 disabled:opacity-50" onClick={() => setOrderId(orderId || generateOrderId())}>
                 {loading ? ( <> <Loader className="animate-spin h-6 w-6" /> <span>Placing Order...</span> </> ) : ( <> <Send size={24} /> <span>Place Order & Send on WhatsApp ({CURRENCY_SYMBOL}{cartTotal.toFixed(2)})</span> </> )}
@@ -771,7 +736,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     <div className="min-h-screen bg-gray-50 font-sans p-4 sm:p-8">
       
       <Modal isOpen={!!error && !loading} title="System Error" onClose={() => setError(null)}>
-          <p className="text-red-600 mb-4">A critical error occurred: <strong>{error}</strong></p>
+          <p className="text-red-600 mb-4">A critical error occurred: <b>{error}</b></p>
           <p className="text-sm text-gray-600">This usually means the Firebase configuration is missing or incorrect. Please check your Netlify Environment Variables and Firebase Rules.</p>
           <button onClick={() => setError(null)} className="mt-4 w-full bg-red-500 text-white py-2 rounded-lg">Close</button>
       </Modal>
