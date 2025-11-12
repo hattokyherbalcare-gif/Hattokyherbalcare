@@ -6,9 +6,20 @@ import {
   signInWithEmailAndPassword, 
   signOut,
   signInAnonymously,
-  signInWithCustomToken
+  signInWithCustomToken // Added this for the smart config
 } from 'firebase/auth';
-import { getFirestore, collection, onSnapshot, addDoc, serverTimestamp, setLogLevel, doc, setDoc } from 'firebase/firestore';
+import { 
+  getFirestore, 
+  collection, 
+  onSnapshot, 
+  addDoc, 
+  serverTimestamp, 
+  setLogLevel, 
+  doc, 
+  setDoc,
+  query, // Added for sorting
+  orderBy // Added for sorting
+} from 'firebase/firestore';
 import { 
   ShoppingCart, Package, Send, MapPin, Phone, User, Banknote, List, X, Loader, 
   Shield, PlusCircle, LayoutList, CheckCircle, Archive, LogIn, LogOut 
@@ -25,13 +36,13 @@ const ADMIN_USER_ID = "KD63qdJ0MkT4G3VSigQ2yUJBkjH2";
 
 // --- (SMART DEPLOYMENT FIX) ---
 // This code works in BOTH the chat preview AND on Netlify
-
 const getFirebaseConfig = () => {
   // 1. Check for chat preview variables
   if (typeof __firebase_config !== 'undefined' && __firebase_config !== "{}") {
     console.log("Using __firebase_config");
     try {
-      return JSON.parse(__firebase_config);
+      const config = JSON.parse(__firebase_config);
+      if (config.apiKey) return config;
     } catch (e) {
       console.error("Failed to parse __firebase_config", e);
     }
@@ -57,7 +68,8 @@ const getFirebaseConfig = () => {
 
 const firebaseConfig = getFirebaseConfig();
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// Use VITE_APP_ID for Netlify, fallback to __app_id for chat, then to default
+const appId = import.meta.env.VITE_APP_ID || (typeof __app_id !== 'undefined' ? __app_id : 'default-app-id');
 // --- (END OF SMART FIX) ---
 
 setLogLevel('debug'); 
@@ -135,9 +147,9 @@ const App = () => {
         });
 
         const authenticate = async () => {
-          if (initialAuthToken) {
+          if (initialAuthToken) { // Chat preview with token
             await signInWithCustomToken(authInstance, initialAuthToken);
-          } else {
+          } else { // Deployed site OR preview without token
             if (!authInstance.currentUser) {
               await signInAnonymously(authInstance);
             }
@@ -168,26 +180,28 @@ const App = () => {
   useEffect(() => {
     if (!db || !user) return; 
 
+    // --- Products Listener (Public) ---
     const productsPath = `artifacts/${appId}/public/data/products`;
-    const unsubscribeProducts = onSnapshot(collection(db, productsPath), (snapshot) => {
+    const productsQuery = query(collection(db, productsPath), orderBy("createdAt", "desc"));
+    const unsubscribeProducts = onSnapshot(productsQuery, (snapshot) => {
       const fetchedProducts = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      }))
-      .sort((a, b) => b.createdAt?.seconds - a.createdAt?.seconds);
-      
+      }));
       setProducts(fetchedProducts);
     }, (err) => {
       console.error("Firestore Products Fetch Error:", err);
       setError("Failed to load products from the database.");
     });
     
+    // --- Orders Listener (Public, but only Admin can see them) ---
     const ordersPath = `artifacts/${appId}/public/data/orders`;
-    const unsubscribeOrders = onSnapshot(collection(db, ordersPath), (snapshot) => {
+    const ordersQuery = query(collection(db, ordersPath), orderBy("placedAt", "desc"));
+    const unsubscribeOrders = onSnapshot(ordersQuery, (snapshot) => {
       const fetchedOrders = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
-      })).sort((a, b) => b.placedAt?.seconds - a.placedAt?.seconds);
+      }));
       setOrders(fetchedOrders);
     }, (err) => {
       console.error("Firestore Orders Fetch Error:", err);
@@ -262,6 +276,7 @@ const App = () => {
       orderId: currentOrderId,
       customerDetails: formData,
       items: cartItems.map(item => ({
+        id: item.id, // Store product ID
         name: item.name,
         quantity: item.quantity,
         price: item.price,
@@ -364,8 +379,8 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
         setModalContent({ title: "Success", message: `${newProduct.name} added to the store!`, onClose: () => setModalContent(null) });
 
     } catch (err) {
-      console.error("Error adding product:", err);
-      setError("Failed to add product to database.");
+        console.error("Error adding product:", err);
+        setError("Failed to add product to database.");
     } finally {
         setIsSubmittingProduct(false);
     }
@@ -411,6 +426,9 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     }
   };
 
+  // --- (CRITICAL FIX) ---
+  // The error was here. It was `catch (err) => {`
+  // It is now correctly `catch (err) {`
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     if (!db || !IS_ADMIN) return;
 
@@ -418,11 +436,12 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
         const ordersPath = `artifacts/${appId}/public/data/orders`;
         const orderRef = doc(db, ordersPath, orderId);
         await setDoc(orderRef, { status: newStatus }, { merge: true });
-    } catch (err) => {
+    } catch (err) { 
         console.error("Error updating order status:", err);
         setError("Failed to update order status.");
     }
   };
+  // --- (END OF CRITICAL FIX) ---
   
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -451,6 +470,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
         setView('PRODUCTS');
     }
     await signOut(auth);
+    // After admin signs out, sign back in as a guest
     await signInAnonymously(auth);
   };
 
@@ -614,7 +634,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                 <div className='col-span-full p-6 bg-yellow-100 rounded-xl text-yellow-800 border-l-4 border-yellow-500 shadow-inner'>
                     <p className="font-semibold mb-2">No products found!</p>
                     {error ? (
-                        <p className="text-sm font-bold text-red-700">Error: {error}. Check Firebase Rules and Diagnostics.</p>
+                        <p className="text-sm font-bold text-red-700">Error: {error}. Please check your Firebase settings and rules.</p>
                     ) : IS_ADMIN ? (
                       <p className="text-sm">As the Admin, use the form in the 'Admin' panel to add your first product.</p>
                     ) : (
@@ -627,7 +647,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
   );
 
   const renderCartView = (cartItems, handleUpdateQuantity, cartTotal, setView) => (
-    <div className="max-w-xl mx-auto.">
+    <div className="max-w-xl mx-auto">
         <div className="bg-white p-6 rounded-2xl shadow-2xl border border-gray-100">
             <h2 className={`text-3xl font-extrabold text-indigo-700 mb-6 flex items-center`}>
                 <ShoppingCart className="mr-3 h-7 w-7" /> Your Cart
@@ -641,7 +661,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                             <div key={item.id} className="flex items-center justify-between p-4 border-b border-gray-100 bg-white hover:bg-gray-50 transition duration-150">
                                 <div className="flex-grow">
                                     <p className="font-semibold text-gray-800">{item.name}</p>
-                                    <p className={`text-sm text-indigo-600 font-bold`}>{CURRENCY_SYMBOL}{item.price.toFixed(2)}</p>
+                                    <p className={`text-sm text-indigo-600 font-bold`}>{CURRENCY_SYMBOL}{item.price.toFixed(2)}</T</p>
                                 </div>
                                 <div className="flex items-center space-x-2 border border-gray-200 rounded-full p-0.5">
                                     <button onClick={() => handleUpdateQuantity(item.id, -1)} className="bg-gray-100 hover:bg-gray-300 w-7 h-7 rounded-full text-base transition duration-150 text-gray-700"> − </button>
@@ -752,7 +772,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
       
       <Modal isOpen={!!error && !loading} title="System Error" onClose={() => setError(null)}>
           <p className="text-red-600 mb-4">A critical error occurred: <strong>{error}</strong></p>
-          <p className="text-sm text-gray-600">This usually means the Firebase configuration is missing or incorrect. Please check the Diagnostic Panel for more details.</p>
+          <p className="text-sm text-gray-600">This usually means the Firebase configuration is missing or incorrect. Please check your Netlify Environment Variables and Firebase Rules.</p>
           <button onClick={() => setError(null)} className="mt-4 w-full bg-red-500 text-white py-2 rounded-lg">Close</button>
       </Modal>
 
@@ -802,27 +822,10 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
       <main className="max-w-6xl mx-auto">
         {content}
       </main>
-      
-      <DiagnosticPanel 
-          config={firebaseConfig} 
-          user={user} 
-          authError={error} // Changed this to show the main 'error'
-          dbError={error} // And this one too
-          IS_ADMIN={IS_ADMIN} 
-      />
     </div>
   );
 };
 
-// --- Mock Products (For Reference) ---
-const MOCK_PRODUCTS = []; // Start with an empty list
-
-// --- Start the App ---
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
-
-    </script>
-</body>
-</html>
+export default App;
 
 
