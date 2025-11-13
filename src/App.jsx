@@ -678,7 +678,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
             <div className={`p-4 bg-indigo-50 rounded-xl border border-indigo-200 text-center shadow-inner`}>
                 <p className="font-bold text-lg text-gray-700 mb-2">
                     2. Use this <span className='underline'>Unique Order ID</span> for your payment reference:
-                </D>
+                </p>
                 <p className={`text-3xl font-extrabold text-indigo-900 p-3 bg-white rounded-lg select-all border-2 border-indigo-300`}>
                     {orderId || 'Generating...'}
                 </p>
