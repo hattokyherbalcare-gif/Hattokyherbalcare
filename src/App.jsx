@@ -125,7 +125,6 @@ const App = () => {
   const [loginError, setLoginError] = useState(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
-  // <!-- ADDED: State for editing/deleting products -->
   const [editingProduct, setEditingProduct] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
@@ -217,7 +216,7 @@ const App = () => {
   }, [db, user]); 
 
   // --- Cart Management Functions ---
-  const handleAddToCart = useCallback((product) => { /* ... (no changes) ... */
+  const handleAddToCart = useCallback((product) => {
     if (product.stock <= 0) {
         setModalContent({
             title: "Out of Stock",
@@ -242,7 +241,7 @@ const App = () => {
     });
   }, []);
 
-  const handleUpdateQuantity = useCallback((id, delta) => { /* ... (no changes) ... */
+  const handleUpdateQuantity = useCallback((id, delta) => {
     setCartItems(prev => {
       const existingItem = prev.find(item => item.id === id);
       if (!existingItem) return prev;
@@ -259,7 +258,7 @@ const App = () => {
   const cartTotal = useMemo(() => cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0), [cartItems]);
 
   // --- Order Submission ---
-  const handlePlaceOrder = async (e) => { /* ... (no changes) ... */
+  const handlePlaceOrder = async (e) => {
     e.preventDefault();
     if (cartItems.length === 0) {
         setModalContent({ title: "Cart Empty", message: "Your cart is empty. Please add items before placing an order.", onClose: () => setModalContent(null) });
@@ -331,7 +330,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     setProductForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAddProduct = async (e) => { /* ... (no changes) ... */
+  const handleAddProduct = async (e) => {
     e.preventDefault();
     if (!db) { setError("Database is not connected."); return; }
     const priceValue = parseFloat(productForm.price);
@@ -370,7 +369,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     setStockInputs(prev => ({ ...prev, [productId]: value }));
   };
 
-  const handleUpdateStock = async (productId) => { /* ... (no changes) ... */
+  const handleUpdateStock = async (productId) => {
     if (!db) { setError("Database is not connected."); return; }
     const newStockValue = stockInputs[productId];
     const newStock = parseInt(newStockValue, 10);
@@ -394,7 +393,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     }
   };
 
-  const handleUpdateOrderStatus = async (orderId, newStatus) => { /* ... (no changes) ... */
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
     if (!db || !IS_ADMIN) return;
     try {
         const ordersPath = `artifacts/${appId}/public/data/orders`;
@@ -406,7 +405,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     }
   };
   
-  // <!-- NEW: Function to handle saving an edited product -->
   const handleUpdateProduct = async (e) => {
     e.preventDefault();
     if (!db || !editingProduct) return;
@@ -417,8 +415,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
         return;
     }
     
-    // Note: We don't update stock here, that's separate.
-    // We just save the other fields.
     const updatedProductData = {
         name: editingProduct.name,
         price: priceValue,
@@ -429,9 +425,9 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     try {
         const productsPath = `artifacts/${appId}/public/data/products`;
         const productRef = doc(db, productsPath, editingProduct.id);
-        await setDoc(productRef, updatedProductData, { merge: true }); // merge: true is key
+        await setDoc(productRef, updatedProductData, { merge: true }); 
         
-        setEditingProduct(null); // Close the modal
+        setEditingProduct(null); 
         setModalContent({ title: "Success", message: `${updatedProductData.name} updated!`, onClose: () => setModalContent(null) });
 
     } catch (err) {
@@ -440,7 +436,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     }
   };
 
-  // <!-- NEW: Function to delete a product -->
   const handleDeleteProduct = async () => {
     if (!db || !showDeleteConfirm) return;
 
@@ -448,7 +443,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
         const productsPath = `artifacts/${appId}/public/data/products`;
         await deleteDoc(doc(db, productsPath, showDeleteConfirm.id));
         
-        setShowDeleteConfirm(null); // Close the modal
+        setShowDeleteConfirm(null); 
         setModalContent({ title: "Success", message: `${showDeleteConfirm.name} has been deleted.`, onClose: () => setModalContent(null) });
 
     } catch (err) {
@@ -459,7 +454,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
 
 
   // --- Auth Functions ---
-  const handleLogin = async (e) => { /* ... (no changes) ... */
+  const handleLogin = async (e) => {
     e.preventDefault();
     if (!auth) return;
     setIsLoggingIn(true);
@@ -477,7 +472,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     }
   };
 
-  const handleLogout = async () => { /* ... (no changes) ... */
+  const handleLogout = async () => {
     if (!auth) return;
     if (view === 'ADMIN') { setView('PRODUCTS'); }
     await signOut(auth);
@@ -486,7 +481,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
 
   // --- Rendering Components ---
 
-  const renderLoginModal = () => ( /* ... (no changes) ... */
+  const renderLoginModal = () => (
     <Modal isOpen={showLogin} title="Admin Login" onClose={() => setShowLogin(false)}>
         <form onSubmit={handleLogin} className="space-y-4">
             <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" required />
@@ -500,7 +495,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     </Modal>
   );
 
-  // <!-- NEW: Modal for Editing Products -->
   const renderEditModal = () => {
       if (!editingProduct) return null;
       
@@ -547,7 +541,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
       );
   };
   
-  // <!-- NEW: Modal for Confirming Delete -->
   const renderDeleteConfirmModal = () => {
     if (!showDeleteConfirm) return null;
     
@@ -577,9 +570,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
             <Shield className="mr-3 h-7 w-7" /> Admin Dashboard
         </h2>
 
-        {/* Product Submission */}
         <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 mb-10">
-            {/* ... (Add Product Form - no changes) ... */}
             <h3 className={`text-2xl font-semibold border-b pb-3 mb-4 text-indigo-600 flex items-center`}>
                 <PlusCircle className="mr-2 h-6 w-6" /> Add New Product
             </h3>
@@ -596,7 +587,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
             </form>
         </div>
         
-        {/* <!-- UPDATED: Manage Inventory Section --> */}
         <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 mb-10">
             <h3 className={`text-2xl font-semibold border-b pb-3 mb-4 text-indigo-600 flex items-center`}>
                 <Archive className="mr-2 h-6 w-6" /> Manage Products
@@ -607,7 +597,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                 ) : (
                     products.map(product => (
                         <div key={product.id} className="p-4 border rounded-xl shadow-sm bg-gray-50">
-                            {/* Product Info */}
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
                                 <div className="mb-3 sm:mb-0">
                                     <p className="font-bold text-lg text-gray-800">{product.name}</p>
@@ -615,16 +604,15 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                                         Current Stock: {product.stock}
                                     </span>
                                 </div>
-                                {/* <!-- NEW: Edit and Delete Buttons --> */}
                                 <div className="flex items-center space-x-2">
                                     <button 
-                                        onClick={() => setEditingProduct(product)} // Opens the edit modal
+                                        onClick={() => setEditingProduct(product)} 
                                         className={`px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg flex items-center space-x-1`}
                                     >
                                         <Edit size={16} /> <span>Edit</span>
                                     </button>
                                     <button 
-                                        onClick={() => setShowDeleteConfirm(product)} // Opens the delete confirm modal
+                                        onClick={() => setShowDeleteConfirm(product)} 
                                         className={`px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg flex items-center space-x-1`}
                                     >
                                         <Trash2 size={16} /> <span>Delete</span>
@@ -632,7 +620,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                                 </div>
                             </div>
                             
-                            {/* Restock Section (Unchanged) */}
                             <div className="flex items-center space-x-2 border-t pt-4">
                                 <input
                                     type="number"
@@ -657,9 +644,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
             </div>
         </div>
 
-        {/* Orders List */}
         <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
-            {/* ... (Orders List - no changes) ... */}
             <h3 className={`text-2xl font-semibold border-b pb-3 mb-4 text-indigo-600 flex items-center`}>
                 <LayoutList className="mr-2 h-6 w-6" /> Recent Orders
             </h3>
@@ -705,12 +690,11 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                 
                 return (
                     <div key={product.id} className="bg-white p-4 rounded-2xl shadow-xl transition transform hover:scale-[1.02] duration-300 flex flex-col justify-between border border-gray-100">
-                        {/* <!-- IMAGE FIX: Changed object-cover to object-contain --> */}
                         <div className="w-full h-40 bg-gray-100 rounded-lg mb-3 shadow-inner overflow-hidden">
                             <img 
                                 src={product.imageUrl || `https://placehold.co/400x300/e0e7ff/1c1c1c?text=${encodeURIComponent(product.name.replace(/ /g, '+'))}`} 
                                 alt={product.name} 
-                                className="w-full h-full object-contain" // <!-- THIS IS THE FIX -->
+                                className="w-full h-full object-contain" 
                                 onError={(e) => { e.target.onerror = null; e.target.src = `https://placehold.co/400x300/60a5fa/ffffff?text=Product+Image`; }} 
                             />
                         </div>
@@ -749,7 +733,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
   const renderCartView = (cartItems, handleUpdateQuantity, cartTotal, setView) => (
     <div className="max-w-xl mx-auto">
         <div className="bg-white p-6 rounded-2xl shadow-2xl border border-gray-100">
-            {/* ... (Cart View - no changes) ... */}
             <h2 className={`text-3xl font-extrabold text-indigo-700 mb-6 flex items-center`}> <ShoppingCart className="mr-3 h-7 w-7" /> Your Cart </h2>
             {cartItems.length === 0 ? ( <p className="text-gray-500 italic text-center py-10 bg-gray-50 rounded-lg">Your cart is empty. Time to shop!</p> ) : (
                 <>
@@ -785,7 +768,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
 
   const renderOrderForm = (formData, setFormData, handlePlaceOrder, cartTotal, orderId, setOrderId, loading) => (
     <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-lg mx-auto border border-gray-100">
-        {/* ... (Order Form - no changes) ... */}
         <h2 className={`text-3xl font-extrabold text-indigo-700 mb-6 flex items-center`}> <Send className="mr-3 h-7 w-7" /> Finalize Order </h2>
         <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
             <div className="flex justify-between items-center">
@@ -825,15 +807,28 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
   );
 
   // --- Main Render Logic ---
+  
+  // <!--- THIS IS THE FIX --- >
+  // The useEffect hook is now at the top level, as required by React.
+  useEffect(() => {
+      if (view === 'FORM' && !orderId) {
+          // We just entered the form, create a new ID.
+          setOrderId(generateOrderId());
+      }
+      // Reset orderId if we navigate away from the form
+      if (view !== 'FORM') {
+          setOrderId(null); 
+      }
+  }, [view]); // Run this effect *only* when the 'view' changes.
+  // <!--- END OF FIX --- >
+
   let content;
   if (view === 'PRODUCTS') {
       content = renderProductCatalog(products, handleAddToCart);
   } else if (view === 'CART') {
       content = renderCartView(cartItems, handleUpdateQuantity, cartTotal, setView);
   } else if (view === 'FORM') {
-      useEffect(() => {
-          if (!orderId) setOrderId(generateOrderId());
-      }, [orderId]);
+      // The buggy useEffect hook has been removed from here.
       content = renderOrderForm(formData, setFormData, handlePlaceOrder, cartTotal, orderId, setOrderId, loading);
   } else if (view === 'ADMIN') {
       if (!IS_ADMIN) {
@@ -868,7 +863,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
           <p className="text-gray-700 mb-4">{modalContent?.message}</p>
       </Modal>
       
-      {/* <!-- NEW: Modals are now included here --> */}
       {renderLoginModal()}
       {renderEditModal()}
       {renderDeleteConfirmModal()}
