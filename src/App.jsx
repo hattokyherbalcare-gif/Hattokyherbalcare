@@ -17,12 +17,14 @@ import {
   setLogLevel, 
   doc, 
   setDoc,
+  deleteDoc, // <!-- ADDED: To delete products -->
   query,
   orderBy
 } from 'firebase/firestore';
 import { 
   ShoppingCart, Package, Send, MapPin, Phone, User, Banknote, List, X, Loader, 
-  Shield, PlusCircle, LayoutList, CheckCircle, Archive, LogIn, LogOut 
+  Shield, PlusCircle, LayoutList, CheckCircle, Archive, LogIn, LogOut, 
+  Trash2, Edit, AlertTriangle // <!-- ADDED: New icons -->
 } from 'lucide-react';
 
 // --- Configuration (Easily Changeable) ---
@@ -74,8 +76,14 @@ const generateOrderId = () => {
 };
 
 // --- Custom Components ---
-const Modal = ({ isOpen, title, children, onClose, action, actionText }) => {
+const Modal = ({ isOpen, title, children, onClose, action, actionText, actionColor = 'indigo' }) => {
     if (!isOpen) return null;
+    
+    const colorClasses = {
+        indigo: 'bg-indigo-500 hover:bg-indigo-600',
+        red: 'bg-red-600 hover:bg-red-700',
+    };
+    
     return (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center p-4 z-50">
             <div className={`bg-white rounded-xl shadow-2xl p-6 w-full max-w-md transform transition-all`}>
@@ -87,7 +95,7 @@ const Modal = ({ isOpen, title, children, onClose, action, actionText }) => {
                 </div>
                 {children}
                 {(action && actionText) && (
-                    <button onClick={action} className={`mt-4 w-full bg-indigo-500 text-white py-2 rounded-lg hover:bg-indigo-600`}>
+                    <button onClick={action} className={`mt-4 w-full text-white py-2 rounded-lg ${colorClasses[actionColor] || colorClasses.indigo}`}>
                         {actionText}
                     </button>
                 )}
@@ -117,9 +125,13 @@ const App = () => {
   const [loginError, setLoginError] = useState(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
+  // <!-- ADDED: State for editing/deleting products -->
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+
   const IS_ADMIN = useMemo(() => user && user.uid === ADMIN_USER_ID, [user]);
 
-  // 1. Firebase Initialization and Authentication Listener
+  // 1. Firebase Initialization
   useEffect(() => {
     try {
       if (firebaseConfig.apiKey && firebaseConfig.projectId) {
@@ -169,7 +181,7 @@ const App = () => {
     }
   }, []); 
 
-  // 2. Fetch Products and Orders (Real-time listener)
+  // 2. Fetch Products and Orders
   useEffect(() => {
     if (!db || !user) return; 
 
@@ -204,9 +216,8 @@ const App = () => {
     }
   }, [db, user]); 
 
-
   // --- Cart Management Functions ---
-  const handleAddToCart = useCallback((product) => {
+  const handleAddToCart = useCallback((product) => { /* ... (no changes) ... */
     if (product.stock <= 0) {
         setModalContent({
             title: "Out of Stock",
@@ -215,7 +226,6 @@ const App = () => {
         });
         return;
     }
-
     setCartItems(prev => {
       const existingItem = prev.find(item => item.id === product.id);
       if (existingItem) {
@@ -232,13 +242,11 @@ const App = () => {
     });
   }, []);
 
-  const handleUpdateQuantity = useCallback((id, delta) => {
+  const handleUpdateQuantity = useCallback((id, delta) => { /* ... (no changes) ... */
     setCartItems(prev => {
       const existingItem = prev.find(item => item.id === id);
       if (!existingItem) return prev;
-
       const newQuantity = existingItem.quantity + delta;
-
       if (newQuantity <= 0) {
         return prev.filter(item => item.id !== id);
       }
@@ -251,18 +259,16 @@ const App = () => {
   const cartTotal = useMemo(() => cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0), [cartItems]);
 
   // --- Order Submission ---
-  const handlePlaceOrder = async (e) => {
+  const handlePlaceOrder = async (e) => { /* ... (no changes) ... */
     e.preventDefault();
     if (cartItems.length === 0) {
         setModalContent({ title: "Cart Empty", message: "Your cart is empty. Please add items before placing an order.", onClose: () => setModalContent(null) });
         return;
     }
-
     setLoading(true);
     setError(null);
     const newOrderId = generateOrderId();
     const currentOrderId = orderId || newOrderId; 
-
     const orderData = {
       orderId: currentOrderId,
       customerDetails: formData,
@@ -277,30 +283,23 @@ const App = () => {
       placedAt: serverTimestamp(),
       userId: user ? user.uid : 'guest-error',
     };
-
     try {
       if (db) {
         const ordersPath = `artifacts/${appId}/public/data/orders`;
         await addDoc(collection(db, ordersPath), orderData);
       } 
-
       const itemsList = cartItems.map(item => `\n- ${item.name} x ${item.quantity} (@ ${CURRENCY_SYMBOL}${item.price.toFixed(2)})`).join('');
       const message = `
 Hello! I am placing an order from ${BUSINESS_NAME}.
-
 *Order ID:* ${currentOrderId}
 *Total Amount:* ${CURRENCY_SYMBOL}${cartTotal.toFixed(2)}
 *Customer:* ${formData.name}
 *Delivery Location:* ${formData.location}
-
 *Items Ordered:*${itemsList}
-
 I will proceed with payment using the Order ID as reference. Please confirm availability!
       `.trim();
-
       const waLink = `https://wa.me/${YOUR_WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
       window.open(waLink, '_blank');
-
       setModalContent({
           title: "Order Placed Successfully!",
           message: `Your order #${currentOrderId} has been saved. Your WhatsApp will now open so you can send the final details. Use the Order ID as reference!`,
@@ -313,7 +312,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
           },
           onClose: () => setModalContent(null)
       });
-
     } catch (err) {
       console.error("Order Placement Error:", err);
       setError("An error occurred while placing the order.");
@@ -333,25 +331,19 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     setProductForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleAddProduct = async (e) => {
+  const handleAddProduct = async (e) => { /* ... (no changes) ... */
     e.preventDefault();
-    if (!db) {
-        setError("Database is not connected.");
-        return;
-    }
-
+    if (!db) { setError("Database is not connected."); return; }
     const priceValue = parseFloat(productForm.price);
     if (isNaN(priceValue) || priceValue <= 0) {
         setModalContent({ title: "Input Error", message: "Price must be a valid number greater than zero.", onClose: () => setModalContent(null) });
         return;
     }
-
     const stockValue = parseInt(productForm.initialStock, 10);
     if (isNaN(stockValue) || stockValue < 0) {
         setModalContent({ title: "Input Error", message: "Stock Quantity must be a valid number (0 or greater).", onClose: () => setModalContent(null) });
         return;
     }
-
     setIsSubmittingProduct(true);
     const newProduct = {
         name: productForm.name,
@@ -361,13 +353,11 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
         createdAt: serverTimestamp(),
         stock: stockValue,
     };
-
     try {
         const productsPath = `artifacts/${appId}/public/data/products`;
         await addDoc(collection(db, productsPath), newProduct);
         setProductForm({ name: '', price: '', imageUrl: '', description: '', initialStock: '' });
         setModalContent({ title: "Success", message: `${newProduct.name} added to the store!`, onClose: () => setModalContent(null) });
-
     } catch (err) {
         console.error("Error adding product:", err);
         setError("Failed to add product to database.");
@@ -377,48 +367,35 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
   };
 
   const handleStockInputChange = (productId, value) => {
-    setStockInputs(prev => ({
-      ...prev,
-      [productId]: value
-    }));
+    setStockInputs(prev => ({ ...prev, [productId]: value }));
   };
 
-  const handleUpdateStock = async (productId) => {
-    if (!db) {
-        setError("Database is not connected.");
-        return;
-    }
-
+  const handleUpdateStock = async (productId) => { /* ... (no changes) ... */
+    if (!db) { setError("Database is not connected."); return; }
     const newStockValue = stockInputs[productId];
     const newStock = parseInt(newStockValue, 10);
-
     if (isNaN(newStock) || newStock < 0) {
         setModalContent({ title: "Input Error", message: "Stock must be a valid number (0 or greater).", onClose: () => setModalContent(null) });
         return;
     }
-
     try {
         const productsPath = `artifacts/${appId}/public/data/products`;
         const productRef = doc(db, productsPath, productId);
         await setDoc(productRef, { stock: newStock }, { merge: true });
-        
         setModalContent({ title: "Success", message: `Stock updated to ${newStock}!`, onClose: () => setModalContent(null) });
-        
         setStockInputs(prev => {
           const newInputs = { ...prev };
           delete newInputs[productId];
           return newInputs;
         });
-
     } catch (err) {
         console.error("Error updating stock:", err);
         setError("Failed to update stock.");
     }
   };
 
-  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+  const handleUpdateOrderStatus = async (orderId, newStatus) => { /* ... (no changes) ... */
     if (!db || !IS_ADMIN) return;
-
     try {
         const ordersPath = `artifacts/${appId}/public/data/orders`;
         const orderRef = doc(db, ordersPath, orderId);
@@ -429,13 +406,64 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     }
   };
   
-  const handleLogin = async (e) => {
+  // <!-- NEW: Function to handle saving an edited product -->
+  const handleUpdateProduct = async (e) => {
+    e.preventDefault();
+    if (!db || !editingProduct) return;
+
+    const priceValue = parseFloat(editingProduct.price);
+    if (isNaN(priceValue) || priceValue <= 0) {
+        setModalContent({ title: "Input Error", message: "Price must be a valid number greater than zero.", onClose: () => setModalContent(null) });
+        return;
+    }
+    
+    // Note: We don't update stock here, that's separate.
+    // We just save the other fields.
+    const updatedProductData = {
+        name: editingProduct.name,
+        price: priceValue,
+        imageUrl: editingProduct.imageUrl || '',
+        description: editingProduct.description || '',
+    };
+
+    try {
+        const productsPath = `artifacts/${appId}/public/data/products`;
+        const productRef = doc(db, productsPath, editingProduct.id);
+        await setDoc(productRef, updatedProductData, { merge: true }); // merge: true is key
+        
+        setEditingProduct(null); // Close the modal
+        setModalContent({ title: "Success", message: `${updatedProductData.name} updated!`, onClose: () => setModalContent(null) });
+
+    } catch (err) {
+        console.error("Error updating product:", err);
+        setError("Failed to update product.");
+    }
+  };
+
+  // <!-- NEW: Function to delete a product -->
+  const handleDeleteProduct = async () => {
+    if (!db || !showDeleteConfirm) return;
+
+    try {
+        const productsPath = `artifacts/${appId}/public/data/products`;
+        await deleteDoc(doc(db, productsPath, showDeleteConfirm.id));
+        
+        setShowDeleteConfirm(null); // Close the modal
+        setModalContent({ title: "Success", message: `${showDeleteConfirm.name} has been deleted.`, onClose: () => setModalContent(null) });
+
+    } catch (err) {
+        console.error("Error deleting product:", err);
+        setError("Failed to delete product.");
+    }
+  };
+
+
+  // --- Auth Functions ---
+  const handleLogin = async (e) => { /* ... (no changes) ... */
     e.preventDefault();
     if (!auth) return;
-
     setIsLoggingIn(true);
     setLoginError(null);
-
     try {
       await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       setShowLogin(false);
@@ -449,19 +477,16 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     }
   };
 
-  const handleLogout = async () => {
+  const handleLogout = async () => { /* ... (no changes) ... */
     if (!auth) return;
-    
-    if (view === 'ADMIN') {
-        setView('PRODUCTS');
-    }
+    if (view === 'ADMIN') { setView('PRODUCTS'); }
     await signOut(auth);
     await signInAnonymously(auth);
   };
 
   // --- Rendering Components ---
 
-  const renderLoginModal = () => (
+  const renderLoginModal = () => ( /* ... (no changes) ... */
     <Modal isOpen={showLogin} title="Admin Login" onClose={() => setShowLogin(false)}>
         <form onSubmit={handleLogin} className="space-y-4">
             <input type="email" placeholder="Email" value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" required />
@@ -475,6 +500,77 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
     </Modal>
   );
 
+  // <!-- NEW: Modal for Editing Products -->
+  const renderEditModal = () => {
+      if (!editingProduct) return null;
+      
+      return (
+        <Modal isOpen={true} title={`Edit ${editingProduct.name}`} onClose={() => setEditingProduct(null)}>
+            <form onSubmit={handleUpdateProduct} className="space-y-4">
+                <input 
+                    type="text" 
+                    placeholder="Product Name" 
+                    value={editingProduct.name} 
+                    onChange={(e) => setEditingProduct(p => ({...p, name: e.target.value}))} 
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" 
+                    required 
+                />
+                <input 
+                    type="number" 
+                    placeholder={`Price in ${CURRENCY_SYMBOL}`} 
+                    value={editingProduct.price} 
+                    onChange={(e) => setEditingProduct(p => ({...p, price: e.target.value}))} 
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" 
+                    step="0.01" 
+                    required 
+                />
+                <input 
+                    type="url" 
+                    placeholder="Image URL" 
+                    value={editingProduct.imageUrl} 
+                    onChange={(e) => setEditingProduct(p => ({...p, imageUrl: e.target.value}))} 
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" 
+                />
+                <textarea 
+                    placeholder="Short Product Description" 
+                    value={editingProduct.description} 
+                    onChange={(e) => setEditingProduct(p => ({...p, description: e.target.value}))} 
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" 
+                    rows="3" 
+                    required 
+                />
+                <button type="submit" className={`w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-xl`}>
+                    Save Changes
+                </button>
+            </form>
+        </Modal>
+      );
+  };
+  
+  // <!-- NEW: Modal for Confirming Delete -->
+  const renderDeleteConfirmModal = () => {
+    if (!showDeleteConfirm) return null;
+    
+    return (
+        <Modal 
+            isOpen={true} 
+            title="Are you sure?" 
+            onClose={() => setShowDeleteConfirm(null)}
+            action={handleDeleteProduct}
+            actionText={`Yes, Delete ${showDeleteConfirm.name}`}
+            actionColor="red"
+        >
+            <div className="text-center">
+                <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+                <p className="text-gray-700">
+                    This action is permanent and cannot be undone. 
+                </p>
+            </div>
+        </Modal>
+    );
+  };
+
+
   const renderAdminPanel = () => (
     <div className="max-w-4xl mx-auto">
         <h2 className={`text-3xl font-extrabold text-indigo-700 mb-8 flex items-center`}>
@@ -483,6 +579,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
 
         {/* Product Submission */}
         <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 mb-10">
+            {/* ... (Add Product Form - no changes) ... */}
             <h3 className={`text-2xl font-semibold border-b pb-3 mb-4 text-indigo-600 flex items-center`}>
                 <PlusCircle className="mr-2 h-6 w-6" /> Add New Product
             </h3>
@@ -499,27 +596,59 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
             </form>
         </div>
         
-        {/* Manual Restock Section */}
+        {/* <!-- UPDATED: Manage Inventory Section --> */}
         <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100 mb-10">
             <h3 className={`text-2xl font-semibold border-b pb-3 mb-4 text-indigo-600 flex items-center`}>
-                <Archive className="mr-2 h-6 w-6" /> Manage Inventory / Restock
+                <Archive className="mr-2 h-6 w-6" /> Manage Products
             </h3>
             <div className="space-y-4">
                 {products.length === 0 ? (
-                    <p className="text-gray-500 italic text-center py-5">No products found. Add a product above to manage its stock.</p>
+                    <p className="text-gray-500 italic text-center py-5">No products found. Add a product above to manage it.</p>
                 ) : (
                     products.map(product => (
-                        <div key={product.id} className="p-4 border rounded-xl shadow-sm bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between">
-                            <div className="mb-3 sm:mb-0">
-                                <p className="font-bold text-lg text-gray-800">{product.name}</p>
-                                <span className={`px-3 py-0.5 rounded-full text-xs font-semibold self-start ${product.stock > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                    Current Stock: {product.stock}
-                                </span>
+                        <div key={product.id} className="p-4 border rounded-xl shadow-sm bg-gray-50">
+                            {/* Product Info */}
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
+                                <div className="mb-3 sm:mb-0">
+                                    <p className="font-bold text-lg text-gray-800">{product.name}</p>
+                                    <span className={`px-3 py-0.5 rounded-full text-xs font-semibold self-start ${product.stock > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                        Current Stock: {product.stock}
+                                    </span>
+                                </div>
+                                {/* <!-- NEW: Edit and Delete Buttons --> */}
+                                <div className="flex items-center space-x-2">
+                                    <button 
+                                        onClick={() => setEditingProduct(product)} // Opens the edit modal
+                                        className={`px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-lg flex items-center space-x-1`}
+                                    >
+                                        <Edit size={16} /> <span>Edit</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => setShowDeleteConfirm(product)} // Opens the delete confirm modal
+                                        className={`px-4 py-2 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-lg flex items-center space-x-1`}
+                                    >
+                                        <Trash2 size={16} /> <span>Delete</span>
+                                    </button>
+                                </div>
                             </div>
-                            <div className="flex items-center space-x-2">
-                                <input type="number" placeholder="New Stock Total" value={stockInputs[product.id] || ''} onChange={(e) => handleStockInputChange(product.id, e.target.value)} className="w-full sm:w-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500" min="0" step="1" />
-                                <button onClick={() => handleUpdateStock(product.id)} disabled={!stockInputs[product.id]} className={`px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}>
-                                    Update
+                            
+                            {/* Restock Section (Unchanged) */}
+                            <div className="flex items-center space-x-2 border-t pt-4">
+                                <input
+                                    type="number"
+                                    placeholder="New Stock Total"
+                                    value={stockInputs[product.id] || ''}
+                                    onChange={(e) => handleStockInputChange(product.id, e.target.value)}
+                                    className="w-full sm:w-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
+                                    min="0"
+                                    step="1"
+                                />
+                                <button
+                                    onClick={() => handleUpdateStock(product.id)}
+                                    disabled={!stockInputs[product.id]}
+                                    className={`px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-semibold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed`}
+                                >
+                                    Update Stock
                                 </button>
                             </div>
                         </div>
@@ -530,6 +659,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
 
         {/* Orders List */}
         <div className="bg-white p-6 rounded-2xl shadow-xl border border-gray-100">
+            {/* ... (Orders List - no changes) ... */}
             <h3 className={`text-2xl font-semibold border-b pb-3 mb-4 text-indigo-600 flex items-center`}>
                 <LayoutList className="mr-2 h-6 w-6" /> Recent Orders
             </h3>
@@ -544,9 +674,7 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                                 <div className="flex items-center space-x-2">
                                     <span className="text-2xl font-extrabold text-green-600">{CURRENCY_SYMBOL}{order.total.toFixed(2)}</span>
                                     <select value={order.status} onChange={(e) => handleUpdateOrderStatus(order.id, e.target.value)} className={`px-3 py-1 rounded-full text-sm font-semibold border ${order.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' : order.status === 'PAID' ? 'bg-green-100 text-green-800 border-green-300' : 'bg-gray-100 text-gray-800 border-gray-300'}`}>
-                                        {orderStatuses.map(status => (
-                                            <option key={status} value={status}>{status}</option>
-                                        ))}
+                                        {orderStatuses.map(status => ( <option key={status} value={status}>{status}</option> ))}
                                     </select>
                                 </div>
                             </div>
@@ -577,7 +705,15 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                 
                 return (
                     <div key={product.id} className="bg-white p-4 rounded-2xl shadow-xl transition transform hover:scale-[1.02] duration-300 flex flex-col justify-between border border-gray-100">
-                        <img src={product.imageUrl || `https://placehold.co/400x300/e0e7ff/1c1c1c?text=${encodeURIComponent(product.name.replace(/ /g, '+'))}`} alt={product.name} className="w-full h-40 object-cover rounded-lg mb-3 shadow-inner" onError={(e) => { e.target.onerror = null; e.target.src = `https://placehold.co/400x300/60a5fa/ffffff?text=Product+Image`; }} />
+                        {/* <!-- IMAGE FIX: Changed object-cover to object-contain --> */}
+                        <div className="w-full h-40 bg-gray-100 rounded-lg mb-3 shadow-inner overflow-hidden">
+                            <img 
+                                src={product.imageUrl || `https://placehold.co/400x300/e0e7ff/1c1c1c?text=${encodeURIComponent(product.name.replace(/ /g, '+'))}`} 
+                                alt={product.name} 
+                                className="w-full h-full object-contain" // <!-- THIS IS THE FIX -->
+                                onError={(e) => { e.target.onerror = null; e.target.src = `https://placehold.co/400x300/60a5fa/ffffff?text=Product+Image`; }} 
+                            />
+                        </div>
                         <div className="flex flex-col flex-grow">
                             <h3 className="text-xl font-bold text-gray-800 mb-1 leading-tight">{product.name}</h3>
                             <p className="text-sm text-gray-500 mb-3">{product.description || 'A high-quality item.'}</p>
@@ -613,22 +749,16 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
   const renderCartView = (cartItems, handleUpdateQuantity, cartTotal, setView) => (
     <div className="max-w-xl mx-auto">
         <div className="bg-white p-6 rounded-2xl shadow-2xl border border-gray-100">
-            <h2 className={`text-3xl font-extrabold text-indigo-700 mb-6 flex items-center`}>
-                <ShoppingCart className="mr-3 h-7 w-7" /> Your Cart
-            </h2>
-            {cartItems.length === 0 ? (
-                <p className="text-gray-500 italic text-center py-10 bg-gray-50 rounded-lg">Your cart is empty. Time to shop!</p>
-            ) : (
+            {/* ... (Cart View - no changes) ... */}
+            <h2 className={`text-3xl font-extrabold text-indigo-700 mb-6 flex items-center`}> <ShoppingCart className="mr-3 h-7 w-7" /> Your Cart </h2>
+            {cartItems.length === 0 ? ( <p className="text-gray-500 italic text-center py-10 bg-gray-50 rounded-lg">Your cart is empty. Time to shop!</p> ) : (
                 <>
                     <div className="space-y-1 mb-6 border border-gray-200 rounded-xl overflow-hidden">
                         {cartItems.map(item => (
                             <div key={item.id} className="flex items-center justify-between p-4 border-b border-gray-100 bg-white hover:bg-gray-50 transition duration-150">
                                 <div className="flex-grow">
                                     <p className="font-semibold text-gray-800">{item.name}</p>
-                                    {/* --- (CRITICAL FIX) --- */}
-                                    {/* The error was here. It was `</T</p>` */}
                                     <p className={`text-sm text-indigo-600 font-bold`}>{CURRENCY_SYMBOL}{item.price.toFixed(2)}</p>
-                                    {/* --- (END OF CRITICAL FIX) --- */}
                                 </div>
                                 <div className="flex items-center space-x-2 border border-gray-200 rounded-full p-0.5">
                                     <button onClick={() => handleUpdateQuantity(item.id, -1)} className="bg-gray-100 hover:bg-gray-300 w-7 h-7 rounded-full text-base transition duration-150 text-gray-700"> − </button>
@@ -655,9 +785,8 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
 
   const renderOrderForm = (formData, setFormData, handlePlaceOrder, cartTotal, orderId, setOrderId, loading) => (
     <div className="bg-white p-6 rounded-2xl shadow-2xl max-w-lg mx-auto border border-gray-100">
-        <h2 className={`text-3xl font-extrabold text-indigo-700 mb-6 flex items-center`}>
-            <Send className="mr-3 h-7 w-7" /> Finalize Order
-        </h2>
+        {/* ... (Order Form - no changes) ... */}
+        <h2 className={`text-3xl font-extrabold text-indigo-700 mb-6 flex items-center`}> <Send className="mr-3 h-7 w-7" /> Finalize Order </h2>
         <div className="mb-6 p-4 bg-gray-50 rounded-xl border border-gray-200">
             <div className="flex justify-between items-center">
                 <span className="text-xl font-semibold text-gray-700">Order Total:</span>
@@ -669,22 +798,17 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
             <div className="space-y-4">
                 {[ { name: 'name', type: 'text', placeholder: 'Full Name', icon: User }, { name: 'phone', type: 'tel', placeholder: 'Phone Number (e.g., 080...)', icon: Phone }, { name: 'location', type: 'text', placeholder: 'Delivery Location/Address', icon: MapPin }, ].map(({ name, type, placeholder, icon: Icon }) => (
                     <div key={name} className="relative">
-                        <Icon size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                        <Icon size={18} className="absolute left-3 top-1-2 transform -translate-y-1-2 text-gray-400" />
                         <input type={type} placeholder={placeholder} name={name} value={formData[name]} onChange={(e) => setFormData(prev => ({ ...prev, [name]: e.target.value }))} className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150`} required />
                     </div>
                 ))}
                 <textarea placeholder="Specific Order Notes (Optional)" value={formData.notes} onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))} className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500 transition duration-150" rows="2"></textarea>
             </div>
             <div className={`p-4 bg-indigo-50 rounded-xl border border-indigo-200 text-center shadow-inner`}>
-                <p className="font-bold text-lg text-gray-700 mb-2">
-                    2. Use this <span className='underline'>Unique Order ID</span> for your payment reference:
-                </p>
-                <p className={`text-3xl font-extrabold text-indigo-900 p-3 bg-white rounded-lg select-all border-2 border-indigo-300`}>
-                    {orderId || 'Generating...'}
-                </p>
+                <p className="font-bold text-lg text-gray-700 mb-2"> 2. Use this <span className='underline'>Unique Order ID</span> for your payment reference: </p>
+                <p className={`text-3xl font-extrabold text-indigo-900 p-3 bg-white rounded-lg select-all border-2 border-indigo-300`}> {orderId || 'Generating...'} </p>
                 <p className='mt-3 text-sm text-gray-600'>This ID links your payment to your digital order.</p>
             </div>
-            
             <div className="p-4 bg-gray-100 rounded-xl border border-gray-200">
                 <h3 className="text-xl font-semibold mb-3 flex items-center text-gray-700"><Banknote className="mr-2" /> Payment Account Details</h3>
                 <div className="text-sm space-y-1">
@@ -693,7 +817,6 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
                     <p><strong>Account Number:</strong> 9041594111 (Copy & Paste)</p>
                 </div>
             </div>
-
             <button type="submit" disabled={loading || cartItems.length === 0} className="w-full flex items-center justify-center space-x-3 bg-green-500 hover:bg-green-600 text-white font-extrabold py-3 rounded-xl text-xl transition duration-200 shadow-xl shadow-green-300 disabled:opacity-50" onClick={() => setOrderId(orderId || generateOrderId())}>
                 {loading ? ( <> <Loader className="animate-spin h-6 w-6" /> <span>Placing Order...</span> </> ) : ( <> <Send size={24} /> <span>Place Order & Send on WhatsApp ({CURRENCY_SYMBOL}{cartTotal.toFixed(2)})</span> </> )}
             </button>
@@ -745,7 +868,10 @@ I will proceed with payment using the Order ID as reference. Please confirm avai
           <p className="text-gray-700 mb-4">{modalContent?.message}</p>
       </Modal>
       
+      {/* <!-- NEW: Modals are now included here --> */}
       {renderLoginModal()}
+      {renderEditModal()}
+      {renderDeleteConfirmModal()}
 
       <header className="flex justify-between items-center py-4 px-2 mb-8 bg-white shadow-md rounded-xl sticky top-0 z-10">
         <h1 className={`text-2xl sm:text-3xl font-extrabold text-indigo-700 flex items-center transition duration-150`}>
